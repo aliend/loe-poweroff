@@ -415,7 +415,7 @@ ${groups.map(groupId => {
         
         const [startStr, endStr] = parts;
         // Validate format HH:MM
-        if (!/^\d{2}:\d{2}$/.test(startStr) || !/^\d{2}:\d{2}$/.test(endStr)) return null;
+        if (!/^\\d{2}:\\d{2}$/.test(startStr) || !/^\\d{2}:\\d{2}$/.test(endStr)) return null;
         
         const startTime = parseTime(startStr);
         let endTime = parseTime(endStr);
