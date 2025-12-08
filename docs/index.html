@@ -4,6 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LOE Power Off - Графіки відключення електроенергії</title>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-TTGCR258VQ"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-TTGCR258VQ');
+  </script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -332,6 +339,16 @@
             this.textContent = '✓ Скопійовано!';
             this.classList.add('copied');
             
+            // Track calendar copy link event
+            if (typeof gtag !== 'undefined') {
+              const groupId = this.getAttribute('data-ics-path').replace('cal/', '').replace('.ics', '');
+              gtag('event', 'calendar_copy_link', {
+                'event_category': 'engagement',
+                'event_label': groupId,
+                'value': 1
+              });
+            }
+            
             setTimeout(() => {
               this.textContent = originalText;
               this.classList.remove('copied');
@@ -349,6 +366,16 @@
               const originalText = this.textContent;
               this.textContent = '✓ Скопійовано!';
               this.classList.add('copied');
+              
+              // Track calendar copy link event
+              if (typeof gtag !== 'undefined') {
+                const groupId = this.getAttribute('data-ics-path').replace('cal/', '').replace('.ics', '');
+                gtag('event', 'calendar_copy_link', {
+                  'event_category': 'engagement',
+                  'event_label': groupId,
+                  'value': 1
+                });
+              }
               
               setTimeout(() => {
                 this.textContent = originalText;
