@@ -156,13 +156,15 @@
     <header>
       <h1>LOE Power Off</h1>
       <div class="schedule-info">
-        <strong>Дата:</strong> 2025-12-08 | <strong>Оновлено:</strong> 07.12.2025, 17:17
+        <strong>Дата:</strong> 2025-12-08 | <strong>Оновлено:</strong> <span id="updated-time" data-timestamp="2025-12-07T19:17:00+02:00"></span>
       </div>
     </header>
     <div class="description">
       <strong>Як користуватися:</strong> Перегляньте графік відключень для вашої групи нижче. Скопіюйте посилання на календар і додайте його до вашого календарного додатку (Google Calendar, Apple Calendar, Outlook тощо).
       <br><br>
       Інструкція для <a href="https://support.google.com/calendar/answer/37118?hl=uk" target="_blank" rel="noopener noreferrer" style="color: #3498db; text-decoration: underline;">Google Calendar</a>, <a href="https://support.microsoft.com/uk-ua/office/%D1%96%D0%BC%D0%BF%D0%BE%D1%80%D1%82-%D0%BA%D0%B0%D0%BB%D0%B5%D0%BD%D0%B4%D0%B0%D1%80%D1%96%D0%B2-%D0%B4%D0%BE-outlook-8e8364e1-400e-4c0f-a573-fe76b5a2d379" target="_blank" rel="noopener noreferrer" style="color: #3498db; text-decoration: underline;">Microsoft Outlook</a>, <a href="https://support.apple.com/uk-ua/guide/iphone/iph3d1110d4/16.0/ios/16.0" target="_blank" rel="noopener noreferrer" style="color: #3498db; text-decoration: underline;">iOS</a>.
+      <br><br>
+      <a href="data/latest.json" target="_blank" rel="noopener noreferrer" style="color: #3498db; text-decoration: underline;">Дані у форматі JSON</a>
     </div>
     <div class="groups">
       <div class="group-card">
@@ -256,6 +258,23 @@
   </div>
   <script>
     (function() {
+      // Format updated timestamp in user's timezone
+      const updatedTimeEl = document.getElementById('updated-time');
+      if (updatedTimeEl) {
+        const timestamp = updatedTimeEl.getAttribute('data-timestamp');
+        if (timestamp) {
+          const date = new Date(timestamp);
+          const formatted = date.toLocaleString('uk-UA', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+          updatedTimeEl.textContent = formatted;
+        }
+      }
+      
       const now = new Date();
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       
