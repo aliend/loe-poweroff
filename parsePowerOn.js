@@ -271,13 +271,6 @@ async function generateIndexPage(data) {
       color: #2c3e50;
       line-height: 1.5;
     }
-    .data-link {
-      margin-bottom: 0.75rem;
-      text-align: center;
-    }
-    .data-link .link {
-      display: inline-block;
-    }
     .groups {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -332,6 +325,19 @@ async function generateIndexPage(data) {
     .group-links .link {
       width: 100%;
     }
+    .link.copy-link {
+      background: #27ae60;
+      font-size: 0.75rem;
+    }
+    .link.copy-link:hover {
+      background: #229954;
+    }
+    .link.copy-link.copied {
+      background: #27ae60;
+    }
+    .link.copy-link.copied:hover {
+      background: #229954;
+    }
     .link {
       display: inline-block;
       padding: 0.35rem 0.6rem;
@@ -346,8 +352,6 @@ async function generateIndexPage(data) {
     .link:hover { background: #2980b9; }
     .link.ics { background: #27ae60; }
     .link.ics:hover { background: #229954; }
-    .link.data { background: #9b59b6; }
-    .link.data:hover { background: #8e44ad; }
     footer {
       margin-top: 0.75rem;
       padding-top: 0.75rem;
@@ -372,10 +376,7 @@ async function generateIndexPage(data) {
       </div>
     </header>
     <div class="description">
-      <strong>Як користуватися:</strong> Перегляньте графік відключень для вашої групи нижче. Натисніть на посилання "ICS", щоб додати календар відключень до вашого календарного додатку (Google Calendar, Apple Calendar, Outlook тощо). Також можна завантажити всі дані у форматі JSON для програмного використання.
-    </div>
-    <div class="data-link">
-      <a href="data/latest.json" class="link data">📊 Завантажити всі дані (JSON)</a>
+      <strong>Як користуватися:</strong> Перегляньте графік відключень для вашої групи нижче. Скопіюйте посилання на календар і додайте його до вашого календарного додатку (Google Calendar, Apple Calendar, Outlook тощо).
     </div>
     <div class="groups">
 ${groups.map(groupId => {
@@ -389,7 +390,7 @@ ${groups.map(groupId => {
         <div class="group-title">Група ${groupId}</div>
         ${intervalsHtml}
         <div class="group-links">
-          <a href="cal/${groupId}.ics" class="link ics">📅 ICS</a>
+          <a href="#" class="link copy-link" data-ics-path="cal/${groupId}.ics">Скопіювати посилання</a>
         </div>
       </div>`;
 }).join('\n')}
@@ -468,6 +469,50 @@ ${groups.map(groupId => {
       
       // Update every minute
       setInterval(updateIntervals, 60000);
+      
+      // Copy link functionality
+      const copyLinks = document.querySelectorAll('.copy-link');
+      copyLinks.forEach(link => {
+        link.addEventListener('click', async function(e) {
+          e.preventDefault();
+          const icsPath = this.getAttribute('data-ics-path');
+          const fullUrl = new URL(icsPath, window.location.href).href;
+          
+          try {
+            await navigator.clipboard.writeText(fullUrl);
+            const originalText = this.textContent;
+            this.textContent = '✓ Скопійовано!';
+            this.classList.add('copied');
+            
+            setTimeout(() => {
+              this.textContent = originalText;
+              this.classList.remove('copied');
+            }, 2000);
+          } catch (err) {
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = fullUrl;
+            textArea.style.position = 'fixed';
+            textArea.style.opacity = '0';
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+              document.execCommand('copy');
+              const originalText = this.textContent;
+              this.textContent = '✓ Скопійовано!';
+              this.classList.add('copied');
+              
+              setTimeout(() => {
+                this.textContent = originalText;
+                this.classList.remove('copied');
+              }, 2000);
+            } catch (e) {
+              alert('Не вдалося скопіювати посилання');
+            }
+            document.body.removeChild(textArea);
+          }
+        });
+      });
     })();
   </script>
 </body>
