@@ -241,7 +241,6 @@
     (function() {
       const now = new Date();
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const currentTime = now.getTime();
       
       function parseTime(timeStr) {
         const [hours, minutes] = timeStr.split(':').map(Number);
@@ -263,6 +262,8 @@
       }
       
       function updateIntervals() {
+        const now = new Date();
+        const currentTime = now.getTime();
         const intervalItems = document.querySelectorAll('.interval-item');
         
         intervalItems.forEach(item => {
