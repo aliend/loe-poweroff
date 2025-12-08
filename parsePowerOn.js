@@ -304,7 +304,7 @@ async function saveIcalCalendars(allDataByDate) {
     }
   }
   
-  // Collect all groups and their intervals by date
+  // Collect all groups and their intervals by date (include all dates for cumulative calendars)
   const groupsByDate = {};
   const allGroupIds = new Set();
   
@@ -342,7 +342,7 @@ async function saveIcalCalendars(allDataByDate) {
   }
 }
 
-function combineDataFiles(allDataByDate) {
+function getNextDayOrToday(allDataByDate) {
   const today = getTodayDate();
   const sortedDates = Object.keys(allDataByDate).filter(d => d >= today).sort();
   
@@ -350,44 +350,15 @@ function combineDataFiles(allDataByDate) {
     return null;
   }
   
-  // Start with the earliest date (today or first future date)
-  const firstDate = sortedDates[0];
-  const combined = {
-    date: firstDate,
-    updated_at: allDataByDate[firstDate].updated_at,
-    groups: {}
-  };
-  
-  // Collect all groups
-  const allGroupIds = new Set();
-  for (const dateStr of sortedDates) {
-    for (const groupId of Object.keys(allDataByDate[dateStr].groups)) {
-      allGroupIds.add(groupId);
-    }
+  // Find next day (first date after today), or use today if no next day
+  const todayIndex = sortedDates.indexOf(today);
+  if (todayIndex >= 0 && todayIndex < sortedDates.length - 1) {
+    // Next day exists
+    return allDataByDate[sortedDates[todayIndex + 1]];
+  } else {
+    // No next day, use today (or first available date)
+    return allDataByDate[sortedDates[0]];
   }
-  
-  // Combine intervals from all dates for each group
-  for (const groupId of allGroupIds) {
-    combined.groups[groupId] = [];
-    for (const dateStr of sortedDates) {
-      const data = allDataByDate[dateStr];
-      if (data.groups[groupId]) {
-        combined.groups[groupId].push(...data.groups[groupId]);
-      }
-    }
-    // Sort intervals by start time
-    combined.groups[groupId].sort((a, b) => a.start.localeCompare(b.start));
-  }
-  
-  // Use the most recent updated_at
-  for (const dateStr of sortedDates) {
-    const data = allDataByDate[dateStr];
-    if (data.updated_at && (!combined.updated_at || data.updated_at > combined.updated_at)) {
-      combined.updated_at = data.updated_at;
-    }
-  }
-  
-  return combined;
 }
 
 async function saveData(data) {
@@ -444,7 +415,7 @@ async function saveData(data) {
     }
   }
 
-  // Load all date files (today + future) and combine them
+  // Load all date files (today + future) to determine which day to use for latest.json
   const allDataByDate = await loadAllDateFiles();
   
   // Add/update the current data
@@ -452,20 +423,20 @@ async function saveData(data) {
     allDataByDate[data.date] = data;
   }
   
-  // Combine all data for latest.json
-  const combinedData = combineDataFiles(allDataByDate);
+  // Get next day or today for latest.json and HTML
+  const selectedData = getNextDayOrToday(allDataByDate);
   
-  if (combinedData) {
-    await fs.writeFile(latestPath, JSON.stringify(combinedData, null, 2), 'utf-8');
-    console.log('Saved to latest.json (combined current + future dates)');
+  if (selectedData) {
+    await fs.writeFile(latestPath, JSON.stringify(selectedData, null, 2), 'utf-8');
+    console.log(`Saved to latest.json (${selectedData.date})`);
     
-    // Generate iCal calendars for all groups (current + future)
+    // Generate iCal calendars for all groups (include all dates for cumulative calendars)
     await saveIcalCalendars(allDataByDate);
     
-    // Generate HTML index page
-    await generateIndexPage(combinedData);
+    // Generate HTML index page for selected day (next day or today)
+    await generateIndexPage(selectedData);
   } else {
-    console.log('No current or future dates to combine');
+    console.log('No current or future dates available');
   }
 }
 
@@ -658,12 +629,12 @@ async function generateIndexPage(data) {
       <br><br>
       <a href="data/latest.json" target="_blank" rel="noopener noreferrer" style="color: #3498db; text-decoration: underline;">Дані у форматі JSON</a>
     </div>
-    <div class="groups">
+    <div class="groups" data-schedule-date="${data.date}">
 ${groups.map(groupId => {
   const intervals = data.groups[groupId];
   const intervalsHtml = intervals.length > 0 
     ? `<div class="intervals">${intervals.map(interval => 
-        `<div class="interval-item">${formatTime(interval.start)} — ${formatTime(interval.end)}</div>`
+        `<div class="interval-item" data-start="${interval.start}" data-end="${interval.end}">${formatTime(interval.start)} — ${formatTime(interval.end)}</div>`
       ).join('')}</div>`
     : '';
   return `      <div class="group-card">
@@ -698,33 +669,6 @@ ${groups.map(groupId => {
         }
       }
       
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      
-      function parseTime(timeStr) {
-        const [hours, minutes] = timeStr.split(':').map(Number);
-        return new Date(today.getTime() + hours * 60 * 60 * 1000 + minutes * 60 * 1000);
-      }
-      
-      function parseInterval(intervalText) {
-        // Split on em dash, en dash, or hyphen
-        const parts = intervalText.split(/[—–-]/).map(s => s.trim());
-        if (parts.length !== 2) return null;
-        
-        const [startStr, endStr] = parts;
-        // Validate format HH:MM
-        if (!/^\\d{2}:\\d{2}$/.test(startStr) || !/^\\d{2}:\\d{2}$/.test(endStr)) return null;
-        
-        const startTime = parseTime(startStr);
-        let endTime = parseTime(endStr);
-        
-        if (endTime <= startTime) {
-          endTime = new Date(endTime.getTime() + 24 * 60 * 60 * 1000);
-        }
-        
-        return { start: startTime, end: endTime };
-      }
-      
       function updateIntervals() {
         const now = new Date();
         const currentTime = now.getTime();
@@ -737,11 +681,16 @@ ${groups.map(groupId => {
         });
         
         intervalItems.forEach(item => {
-          const interval = parseInterval(item.textContent);
-          if (!interval) return;
+          // Get start and end times from data attributes (includes full date and time)
+          const startStr = item.getAttribute('data-start');
+          const endStr = item.getAttribute('data-end');
           
-          const startTime = interval.start.getTime();
-          const endTime = interval.end.getTime();
+          if (!startStr || !endStr) return;
+          
+          const startTime = new Date(startStr).getTime();
+          const endTime = new Date(endStr).getTime();
+          
+          if (isNaN(startTime) || isNaN(endTime)) return;
           
           item.classList.remove('past', 'current');
           
