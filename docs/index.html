@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LOE Power Off - Графіки відключення електроенергії</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      line-height: 1.4;
+      color: #333;
+      background: #f5f5f5;
+      padding: 0.75rem;
+    }
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 6px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+      padding: 1rem 1.25rem;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 0.75rem;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    h1 {
+      color: #2c3e50;
+      font-size: 1.5rem;
+      font-weight: 600;
+    }
+    .schedule-info {
+      color: #7f8c8d;
+      font-size: 0.85rem;
+    }
+    .schedule-info strong { color: #2c3e50; }
+    .description {
+      background: #e8f4f8;
+      padding: 0.75rem;
+      border-radius: 4px;
+      margin-bottom: 0.75rem;
+      font-size: 0.85rem;
+      color: #2c3e50;
+      line-height: 1.5;
+    }
+    .data-link {
+      margin-bottom: 0.75rem;
+      text-align: center;
+    }
+    .data-link .link {
+      display: inline-block;
+    }
+    .groups {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+    .group-card {
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 0.6rem 0.75rem;
+      background: #fafafa;
+      display: flex;
+      flex-direction: column;
+    }
+    .group-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #2c3e50;
+      margin-bottom: 0.5rem;
+    }
+    .intervals {
+      font-size: 0.75rem;
+      color: #555;
+      margin-bottom: 0.5rem;
+      line-height: 1.5;
+      flex-grow: 1;
+    }
+    .interval-item {
+      margin-bottom: 0.25rem;
+    }
+    .group-links {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      margin-top: auto;
+    }
+    .group-links .link {
+      width: 100%;
+    }
+    .link {
+      display: inline-block;
+      padding: 0.35rem 0.6rem;
+      background: #3498db;
+      color: white;
+      text-decoration: none;
+      border-radius: 3px;
+      font-size: 0.8rem;
+      transition: background 0.15s;
+      text-align: center;
+    }
+    .link:hover { background: #2980b9; }
+    .link.ics { background: #27ae60; }
+    .link.ics:hover { background: #229954; }
+    .link.data { background: #9b59b6; }
+    .link.data:hover { background: #8e44ad; }
+    footer {
+      margin-top: 0.75rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid #ddd;
+      text-align: center;
+      color: #7f8c8d;
+      font-size: 0.8rem;
+    }
+    footer a {
+      color: #3498db;
+      text-decoration: none;
+    }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>LOE Power Off</h1>
+      <div class="schedule-info">
+        <strong>Дата:</strong> 2025-12-08 | <strong>Оновлено:</strong> 07.12.2025, 17:17
+      </div>
+    </header>
+    <div class="description">
+      <strong>Як користуватися:</strong> Перегляньте графік відключень для вашої групи нижче. Натисніть на посилання "ICS", щоб додати календар відключень до вашого календарного додатку (Google Calendar, Apple Calendar, Outlook тощо). Також можна завантажити всі дані у форматі JSON для програмного використання.
+    </div>
+    <div class="data-link">
+      <a href="data/latest.json" class="link data">📊 Завантажити всі дані (JSON)</a>
+    </div>
+    <div class="groups">
+      <div class="group-card">
+        <div class="group-title">Група 1.1</div>
+        <div class="intervals"><div class="interval-item">00:00 — 01:30</div><div class="interval-item">05:00 — 08:30</div><div class="interval-item">12:00 — 19:00</div><div class="interval-item">22:30 — 00:00</div></div>
+        <div class="group-links">
+          <a href="cal/1.1.ics" class="link ics">📅 ICS</a>
+        </div>
+      </div>
+      <div class="group-card">
+        <div class="group-title">Група 1.2</div>
+        <div class="intervals"><div class="interval-item">05:00 — 12:00</div><div class="interval-item">15:30 — 22:30</div></div>
+        <div class="group-links">
+          <a href="cal/1.2.ics" class="link ics">📅 ICS</a>
+        </div>
+      </div>
+      <div class="group-card">
+        <div class="group-title">Група 2.1</div>
+        <div class="intervals"><div class="interval-item">00:00 — 01:30</div><div class="interval-item">06:00 — 12:00</div><div class="interval-item">15:30 — 22:00</div></div>
+        <div class="group-links">
+          <a href="cal/2.1.ics" class="link ics">📅 ICS</a>
+        </div>
+      </div>
+      <div class="group-card">
+        <div class="group-title">Група 2.2</div>
+        <div class="intervals"><div class="interval-item">05:00 — 08:30</div><div class="interval-item">12:00 — 19:00</div><div class="interval-item">22:30 — 00:00</div></div>
+        <div class="group-links">
+          <a href="cal/2.2.ics" class="link ics">📅 ICS</a>
+        </div>
+      </div>
+      <div class="group-card">
+        <div class="group-title">Група 3.1</div>
+        <div class="intervals"><div class="interval-item">01:30 — 05:00</div><div class="interval-item">08:30 — 15:30</div><div class="interval-item">19:00 — 00:00</div></div>
+        <div class="group-links">
+          <a href="cal/3.1.ics" class="link ics">📅 ICS</a>
+        </div>
+      </div>
+      <div class="group-card">
+        <div class="group-title">Група 3.2</div>
+        <div class="intervals"><div class="interval-item">00:00 — 02:00</div><div class="interval-item">08:00 — 12:00</div><div class="interval-item">15:30 — 22:30</div></div>
+        <div class="group-links">
+          <a href="cal/3.2.ics" class="link ics">📅 ICS</a>
+        </div>
+      </div>
+      <div class="group-card">
+        <div class="group-title">Група 4.1</div>
+        <div class="intervals"><div class="interval-item">03:00 — 08:30</div><div class="interval-item">12:00 — 19:00</div><div class="interval-item">22:30 — 00:00</div></div>
+        <div class="group-links">
+          <a href="cal/4.1.ics" class="link ics">📅 ICS</a>
+        </div>
+      </div>
+      <div class="group-card">
+        <div class="group-title">Група 4.2</div>
+        <div class="intervals"><div class="interval-item">01:30 — 08:30</div><div class="interval-item">12:00 — 19:00</div><div class="interval-item">22:30 — 00:00</div></div>
+        <div class="group-links">
+          <a href="cal/4.2.ics" class="link ics">📅 ICS</a>
+        </div>
+      </div>
+      <div class="group-card">
+        <div class="group-title">Група 5.1</div>
+        <div class="intervals"><div class="interval-item">00:00 — 05:00</div><div class="interval-item">08:30 — 15:30</div><div class="interval-item">19:00 — 22:30</div></div>
+        <div class="group-links">
+          <a href="cal/5.1.ics" class="link ics">📅 ICS</a>
+        </div>
+      </div>
+      <div class="group-card">
+        <div class="group-title">Група 5.2</div>
+        <div class="intervals"><div class="interval-item">00:00 — 03:00</div><div class="interval-item">08:30 — 15:30</div><div class="interval-item">19:00 — 22:30</div></div>
+        <div class="group-links">
+          <a href="cal/5.2.ics" class="link ics">📅 ICS</a>
+        </div>
+      </div>
+      <div class="group-card">
+        <div class="group-title">Група 6.1</div>
+        <div class="intervals"><div class="interval-item">00:00 — 05:00</div><div class="interval-item">08:30 — 15:30</div><div class="interval-item">19:00 — 22:30</div></div>
+        <div class="group-links">
+          <a href="cal/6.1.ics" class="link ics">📅 ICS</a>
+        </div>
+      </div>
+      <div class="group-card">
+        <div class="group-title">Група 6.2</div>
+        <div class="intervals"><div class="interval-item">05:00 — 12:00</div><div class="interval-item">15:30 — 20:00</div><div class="interval-item">22:30 — 00:00</div></div>
+        <div class="group-links">
+          <a href="cal/6.2.ics" class="link ics">📅 ICS</a>
+        </div>
+      </div>
+    </div>
+    <footer>
+      <a href="https://github.com/osuhol/loe-poweroff" target="_blank" rel="noopener noreferrer">GitHub</a>
+    </footer>
+  </div>
+</body>
+</html>
