@@ -48,7 +48,6 @@ function parseScheduleFromHtml(html) {
   let updatedIso = null;
   if (updatedMatch) {
     const [, timeStr, updatedDateStr] = updatedMatch;
-    console.log(updatedDateStr, timeStr);
     updatedIso = makeIso(parseUkDate(updatedDateStr), timeStr);
   }
 
@@ -689,8 +688,6 @@ async function main() {
 
     const html = await page.content(); // тут вже є всі <p>
     const data = parseScheduleFromHtml(html);
-
-    console.log(data);
     
     await saveData(data);
     
