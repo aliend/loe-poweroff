@@ -395,7 +395,7 @@ ${groups.map(groupId => {
 }).join('\n')}
     </div>
     <footer>
-      <a href="https://github.com/osuhol/loe-poweroff" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://github.com/aliend/loe-poweroff" target="_blank" rel="noopener noreferrer">GitHub</a>
     </footer>
   </div>
   <script>
