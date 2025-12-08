@@ -48,6 +48,7 @@ function parseScheduleFromHtml(html) {
   let updatedIso = null;
   if (updatedMatch) {
     const [, timeStr, updatedDateStr] = updatedMatch;
+    console.log(updatedDateStr, timeStr);
     updatedIso = makeIso(parseUkDate(updatedDateStr), timeStr);
   }
 
@@ -98,7 +99,40 @@ function isoToIcalDateTime(isoString) {
   return isoString.replace(/[-:]/g, '').replace(/\+.*$/, '').replace(/Z$/, '');
 }
 
-function generateIcalForGroup(groupId, intervals, scheduleDate) {
+function parseExistingIcal(icalContent) {
+  const events = {};
+  const lines = icalContent.split(/\r?\n/);
+  let currentEvent = null;
+  
+  for (const line of lines) {
+    if (line.startsWith('BEGIN:VEVENT')) {
+      currentEvent = {};
+    } else if (line.startsWith('END:VEVENT')) {
+      if (currentEvent && currentEvent.uid) {
+        events[currentEvent.uid] = {
+          sequence: currentEvent.sequence || 0,
+          dtstart: currentEvent.dtstart,
+          dtend: currentEvent.dtend,
+        };
+      }
+      currentEvent = null;
+    } else if (currentEvent) {
+      if (line.startsWith('UID:')) {
+        currentEvent.uid = line.substring(4);
+      } else if (line.startsWith('SEQUENCE:')) {
+        currentEvent.sequence = parseInt(line.substring(9), 10) || 0;
+      } else if (line.startsWith('DTSTART:')) {
+        currentEvent.dtstart = line.substring(8);
+      } else if (line.startsWith('DTEND:')) {
+        currentEvent.dtend = line.substring(6);
+      }
+    }
+  }
+  
+  return events;
+}
+
+function generateIcalForGroup(groupId, intervals, scheduleDate, existingEvents = {}) {
   const lines = [];
   
   lines.push('BEGIN:VCALENDAR');
@@ -113,8 +147,26 @@ function generateIcalForGroup(groupId, intervals, scheduleDate) {
     const dtend = isoToIcalDateTime(interval.end);
     const uid = `${scheduleDate}-${groupId}-${i}@loe-poweroff`;
     
+    // Determine sequence number
+    let sequence = 0;
+    const existingEvent = existingEvents[uid];
+    if (existingEvent) {
+      // Event exists - check if it changed
+      if (existingEvent.dtstart !== dtstart || existingEvent.dtend !== dtend) {
+        // Event changed - increment sequence
+        sequence = existingEvent.sequence + 1;
+      } else {
+        // Event unchanged - keep same sequence
+        sequence = existingEvent.sequence;
+      }
+    } else {
+      // New event - start at 0
+      sequence = 0;
+    }
+    
     lines.push('BEGIN:VEVENT');
     lines.push(`UID:${uid}`);
+    lines.push(`SEQUENCE:${sequence}`);
     lines.push(`DTSTART:${dtstart}`);
     lines.push(`DTEND:${dtend}`);
     lines.push(`SUMMARY:Відключення електроенергії (Група ${groupId})`);
@@ -142,9 +194,22 @@ async function saveIcalCalendars(data) {
   
   // Generate iCal file for each group
   for (const [groupId, intervals] of Object.entries(data.groups)) {
-    const icalContent = generateIcalForGroup(groupId, intervals, data.date);
     const fileName = `${groupId}.ics`;
     const filePath = path.join(calDir, fileName);
+    
+    // Read existing ICS file to get current sequence numbers
+    let existingEvents = {};
+    try {
+      const existingContent = await fs.readFile(filePath, 'utf-8');
+      existingEvents = parseExistingIcal(existingContent);
+    } catch (error) {
+      // File doesn't exist or can't be read - start fresh
+      if (error.code !== 'ENOENT') {
+        console.warn(`Warning: Could not read existing ICS file ${fileName}:`, error.message);
+      }
+    }
+    
+    const icalContent = generateIcalForGroup(groupId, intervals, data.date, existingEvents);
     
     await fs.writeFile(filePath, icalContent, 'utf-8');
     console.log(`Saved iCal calendar: ${fileName}`);
