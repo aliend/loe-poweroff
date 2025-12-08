@@ -166,14 +166,13 @@ async function saveData(data) {
   const latestPath = path.join(dataDir, 'latest.json');
   
   // Check if latest.json exists and compare updated_at
-  let shouldSaveLatest = true;
   try {
     const existingContent = await fs.readFile(latestPath, 'utf-8');
     const existingData = JSON.parse(existingContent);
     
     if (existingData.updated_at === data.updated_at) {
-      shouldSaveLatest = false;
-      console.log('Skipping latest.json write: updated_at unchanged');
+      console.log('Skipping all file operations: updated_at unchanged');
+      return;
     }
   } catch (error) {
     // File doesn't exist or is invalid, proceed with saving
@@ -182,13 +181,11 @@ async function saveData(data) {
     }
   }
 
-  // Save to latest.json if updated_at changed
-  if (shouldSaveLatest) {
-    await fs.writeFile(latestPath, JSON.stringify(data, null, 2), 'utf-8');
-    console.log('Saved to latest.json');
-  }
+  // Save to latest.json
+  await fs.writeFile(latestPath, JSON.stringify(data, null, 2), 'utf-8');
+  console.log('Saved to latest.json');
 
-  // Always save to date-specific file
+  // Save to date-specific file
   const datePath = path.join(dataDir, `${data.date}.json`);
   await fs.writeFile(datePath, JSON.stringify(data, null, 2), 'utf-8');
   console.log(`Saved to ${data.date}.json`);
