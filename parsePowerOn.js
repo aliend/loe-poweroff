@@ -129,7 +129,7 @@ function generateIcalForGroup(groupId, intervals, scheduleDate) {
 }
 
 async function saveIcalCalendars(data) {
-  const calDir = path.join(process.cwd(), 'public', 'cal');
+  const calDir = path.join(process.cwd(), 'docs', 'cal');
   
   // Create cal directory if it doesn't exist
   try {
@@ -152,7 +152,7 @@ async function saveIcalCalendars(data) {
 }
 
 async function saveData(data) {
-  const dataDir = path.join(process.cwd(), 'public', 'data');
+  const dataDir = path.join(process.cwd(), 'docs', 'data');
   
   // Create data directory if it doesn't exist
   try {
@@ -208,11 +208,11 @@ function formatTime(isoString) {
 }
 
 async function generateIndexPage(data) {
-  const publicDir = path.join(process.cwd(), 'public');
+  const docsDir = path.join(process.cwd(), 'docs');
   
-  // Create public directory if it doesn't exist
+  // Create docs directory if it doesn't exist
   try {
-    await fs.mkdir(publicDir, { recursive: true });
+    await fs.mkdir(docsDir, { recursive: true });
   } catch (error) {
     if (error.code !== 'EEXIST') {
       throw error;
@@ -386,12 +386,12 @@ ${groups.map(groupId => {
 </body>
 </html>`;
   
-  const indexPath = path.join(publicDir, 'index.html');
+  const indexPath = path.join(docsDir, 'index.html');
   await fs.writeFile(indexPath, html, 'utf-8');
   console.log('Generated index.html');
   
   // Create .nojekyll file to disable Jekyll processing on GitHub Pages
-  const nojekyllPath = path.join(publicDir, '.nojekyll');
+  const nojekyllPath = path.join(docsDir, '.nojekyll');
   await fs.writeFile(nojekyllPath, '', 'utf-8');
   console.log('Created .nojekyll file');
 }
