@@ -99,6 +99,24 @@ function isoToIcalDateTime(isoString) {
   return isoString.replace(/[-:]/g, '').replace(/\+.*$/, '').replace(/Z$/, '');
 }
 
+function generateVTimezone() {
+  // Generate VTIMEZONE for Europe/Kyiv (UTC+2, no DST changes in recent years)
+  // Note: Ukraine abolished DST in 2021, so it's permanently UTC+2
+  const currentYear = new Date().getFullYear();
+  
+  return [
+    'BEGIN:VTIMEZONE',
+    'TZID:Europe/Kyiv',
+    'BEGIN:STANDARD',
+    `DTSTART:${currentYear}0101T000000`,
+    'TZOFFSETFROM:+0200',
+    'TZOFFSETTO:+0200',
+    'TZNAME:EET',
+    'END:STANDARD',
+    'END:VTIMEZONE'
+  ].join('\r\n');
+}
+
 function parseExistingIcal(icalContent) {
   const events = {};
   const lines = icalContent.split(/\r?\n/);
@@ -121,10 +139,18 @@ function parseExistingIcal(icalContent) {
         currentEvent.uid = line.substring(4);
       } else if (line.startsWith('SEQUENCE:')) {
         currentEvent.sequence = parseInt(line.substring(9), 10) || 0;
-      } else if (line.startsWith('DTSTART:')) {
-        currentEvent.dtstart = line.substring(8);
-      } else if (line.startsWith('DTEND:')) {
-        currentEvent.dtend = line.substring(6);
+      } else if (line.startsWith('DTSTART')) {
+        // Handle both DTSTART: and DTSTART;TZID=Europe/Kyiv: formats
+        const match = line.match(/^DTSTART(?:;TZID=[^:]+)?:(.+)$/);
+        if (match) {
+          currentEvent.dtstart = match[1];
+        }
+      } else if (line.startsWith('DTEND')) {
+        // Handle both DTEND: and DTEND;TZID=Europe/Kyiv: formats
+        const match = line.match(/^DTEND(?:;TZID=[^:]+)?:(.+)$/);
+        if (match) {
+          currentEvent.dtend = match[1];
+        }
       }
     }
   }
@@ -140,6 +166,7 @@ function generateIcalForGroup(groupId, intervals, scheduleDate, existingEvents =
   lines.push('PRODID:-//LOE Power Off//Group ' + groupId + '//EN');
   lines.push('CALSCALE:GREGORIAN');
   lines.push('METHOD:PUBLISH');
+  lines.push(generateVTimezone());
   
   for (let i = 0; i < intervals.length; i++) {
     const interval = intervals[i];
@@ -152,7 +179,10 @@ function generateIcalForGroup(groupId, intervals, scheduleDate, existingEvents =
     const existingEvent = existingEvents[uid];
     if (existingEvent) {
       // Event exists - check if it changed
-      if (existingEvent.dtstart !== dtstart || existingEvent.dtend !== dtend) {
+      // Compare with TZID format for existing events
+      const existingDtstart = existingEvent.dtstart.replace(/^.*TZID=Europe\/Kyiv:/, '').replace(/^DTSTART:/, '');
+      const existingDtend = existingEvent.dtend.replace(/^.*TZID=Europe\/Kyiv:/, '').replace(/^DTEND:/, '');
+      if (existingDtstart !== dtstart || existingDtend !== dtend) {
         // Event changed - increment sequence
         sequence = existingEvent.sequence + 1;
       } else {
@@ -167,8 +197,8 @@ function generateIcalForGroup(groupId, intervals, scheduleDate, existingEvents =
     lines.push('BEGIN:VEVENT');
     lines.push(`UID:${uid}`);
     lines.push(`SEQUENCE:${sequence}`);
-    lines.push(`DTSTART:${dtstart}`);
-    lines.push(`DTEND:${dtend}`);
+    lines.push(`DTSTART;TZID=Europe/Kyiv:${dtstart}`);
+    lines.push(`DTEND;TZID=Europe/Kyiv:${dtend}`);
     lines.push(`SUMMARY:Відключення електроенергії (Група ${groupId})`);
     lines.push(`DESCRIPTION:Група ${groupId}. Електроенергії немає з ${interval.start.substring(11, 16)} до ${interval.end.substring(11, 16)}`);
     lines.push(`DTSTAMP:${isoToIcalDateTime(new Date().toISOString())}`);
