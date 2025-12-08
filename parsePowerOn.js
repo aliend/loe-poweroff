@@ -292,6 +292,13 @@ async function generateIndexPage(data) {
       display: flex;
       flex-direction: column;
     }
+    .group-card.has-current {
+      border-color: #e74c3c;
+      background: #fff5f5;
+    }
+    .group-card.has-current .group-title {
+      color: #e74c3c;
+    }
     .group-title {
       font-size: 0.95rem;
       font-weight: 600;
@@ -424,6 +431,12 @@ ${groups.map(groupId => {
         const now = new Date();
         const currentTime = now.getTime();
         const intervalItems = document.querySelectorAll('.interval-item');
+        const groupCards = document.querySelectorAll('.group-card');
+        
+        // Reset group cards
+        groupCards.forEach(card => {
+          card.classList.remove('has-current');
+        });
         
         intervalItems.forEach(item => {
           const interval = parseInterval(item.textContent);
@@ -439,6 +452,11 @@ ${groups.map(groupId => {
           } else if (currentTime >= startTime && currentTime < endTime) {
             // Current period
             item.classList.add('current');
+            // Mark parent group card as having current interval
+            const groupCard = item.closest('.group-card');
+            if (groupCard) {
+              groupCard.classList.add('has-current');
+            }
           } else {
             // Past period
             item.classList.add('past');
