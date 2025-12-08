@@ -85,6 +85,14 @@
     .interval-item {
       margin-bottom: 0.25rem;
     }
+    .interval-item.past {
+      color: #999;
+      opacity: 0.6;
+    }
+    .interval-item.current {
+      font-weight: bold;
+      color: #2c3e50;
+    }
     .group-links {
       display: flex;
       flex-direction: column;
@@ -229,5 +237,60 @@
       <a href="https://github.com/osuhol/loe-poweroff" target="_blank" rel="noopener noreferrer">GitHub</a>
     </footer>
   </div>
+  <script>
+    (function() {
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const currentTime = now.getTime();
+      
+      function parseTime(timeStr) {
+        const [hours, minutes] = timeStr.split(':').map(Number);
+        return new Date(today.getTime() + hours * 60 * 60 * 1000 + minutes * 60 * 1000);
+      }
+      
+      function parseInterval(intervalText) {
+        const match = intervalText.match(/(\d{2}:\d{2})\s*—\s*(\d{2}:\d{2})/);
+        if (!match) return null;
+        
+        const startTime = parseTime(match[1]);
+        let endTime = parseTime(match[2]);
+        
+        if (endTime <= startTime) {
+          endTime = new Date(endTime.getTime() + 24 * 60 * 60 * 1000);
+        }
+        
+        return { start: startTime, end: endTime };
+      }
+      
+      function updateIntervals() {
+        const intervalItems = document.querySelectorAll('.interval-item');
+        
+        intervalItems.forEach(item => {
+          const interval = parseInterval(item.textContent);
+          if (!interval) return;
+          
+          const startTime = interval.start.getTime();
+          const endTime = interval.end.getTime();
+          
+          item.classList.remove('past', 'current');
+          
+          if (currentTime < startTime) {
+            // Future period - no special styling
+          } else if (currentTime >= startTime && currentTime < endTime) {
+            // Current period
+            item.classList.add('current');
+          } else {
+            // Past period
+            item.classList.add('past');
+          }
+        });
+      }
+      
+      updateIntervals();
+      
+      // Update every minute
+      setInterval(updateIntervals, 60000);
+    })();
+  </script>
 </body>
 </html>
