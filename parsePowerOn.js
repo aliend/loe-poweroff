@@ -402,12 +402,16 @@ ${groups.map(groupId => {
       }
       
       function parseInterval(intervalText) {
-        // Match em dash (—), en dash (–), or regular hyphen (-)
-        const match = intervalText.match(/(\d{2}:\d{2})\s*[—–-]\s*(\d{2}:\d{2})/);
-        if (!match) return null;
+        // Split on em dash, en dash, or hyphen
+        const parts = intervalText.split(/[—–-]/).map(s => s.trim());
+        if (parts.length !== 2) return null;
         
-        const startTime = parseTime(match[1]);
-        let endTime = parseTime(match[2]);
+        const [startStr, endStr] = parts;
+        // Validate format HH:MM
+        if (!/^\d{2}:\d{2}$/.test(startStr) || !/^\d{2}:\d{2}$/.test(endStr)) return null;
+        
+        const startTime = parseTime(startStr);
+        let endTime = parseTime(endStr);
         
         if (endTime <= startTime) {
           endTime = new Date(endTime.getTime() + 24 * 60 * 60 * 1000);
