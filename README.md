@@ -6,8 +6,9 @@
 
 Скрипт:
 - Парсить графік відключень з [poweron.loe.lviv.ua](https://poweron.loe.lviv.ua/)
-- Зберігає дані у форматі JSON (`data/latest.json` та `data/YYYY-MM-DD.json`)
-- Генерує iCal календарі для кожної групи відключень (`cal/X.X.ics`)
+- Зберігає дані у форматі JSON (`public/data/latest.json` та `public/data/YYYY-MM-DD.json`)
+- Генерує iCal календарі для кожної групи відключень (`public/cal/X.X.ics`)
+- Створює HTML сторінку з посиланнями на всі файли (`public/index.html`)
 
 ## Встановлення
 
@@ -22,8 +23,11 @@ node parsePowerOn.js
 ```
 
 Скрипт збереже:
-- JSON файли з даними в `data/`
-- iCal календарі для кожної групи в `cal/`
+- JSON файли з даними в `public/data/`
+- iCal календарі для кожної групи в `public/cal/`
+- HTML сторінку в `public/index.html`
+
+Всі файли готові для публікації на GitHub Pages (налаштуйте GitHub Pages для використання директорії `/public`).
 
 ## Структура даних
 

@@ -129,7 +129,7 @@ function generateIcalForGroup(groupId, intervals, scheduleDate) {
 }
 
 async function saveIcalCalendars(data) {
-  const calDir = path.join(process.cwd(), 'cal');
+  const calDir = path.join(process.cwd(), 'public', 'cal');
   
   // Create cal directory if it doesn't exist
   try {
@@ -152,7 +152,7 @@ async function saveIcalCalendars(data) {
 }
 
 async function saveData(data) {
-  const dataDir = path.join(process.cwd(), 'data');
+  const dataDir = path.join(process.cwd(), 'public', 'data');
   
   // Create data directory if it doesn't exist
   try {
@@ -195,6 +195,205 @@ async function saveData(data) {
   
   // Generate iCal calendars for all groups
   await saveIcalCalendars(data);
+  
+  // Generate HTML index page
+  await generateIndexPage(data);
+}
+
+function formatTime(isoString) {
+  // Extract time from ISO string like "2025-12-08T00:00:00+02:00"
+  const match = isoString.match(/T(\d{2}):(\d{2})/);
+  if (!match) return isoString;
+  return match[1] + ':' + match[2];
+}
+
+async function generateIndexPage(data) {
+  const publicDir = path.join(process.cwd(), 'public');
+  
+  // Create public directory if it doesn't exist
+  try {
+    await fs.mkdir(publicDir, { recursive: true });
+  } catch (error) {
+    if (error.code !== 'EEXIST') {
+      throw error;
+    }
+  }
+  
+  const groups = Object.keys(data.groups).sort();
+  
+  const html = `<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LOE Power Off - Графіки відключення електроенергії</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      line-height: 1.4;
+      color: #333;
+      background: #f5f5f5;
+      padding: 0.75rem;
+    }
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 6px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+      padding: 1rem 1.25rem;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 0.75rem;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    h1 {
+      color: #2c3e50;
+      font-size: 1.5rem;
+      font-weight: 600;
+    }
+    .schedule-info {
+      color: #7f8c8d;
+      font-size: 0.85rem;
+    }
+    .schedule-info strong { color: #2c3e50; }
+    .description {
+      background: #e8f4f8;
+      padding: 0.75rem;
+      border-radius: 4px;
+      margin-bottom: 0.75rem;
+      font-size: 0.85rem;
+      color: #2c3e50;
+      line-height: 1.5;
+    }
+    .data-link {
+      margin-bottom: 0.75rem;
+      text-align: center;
+    }
+    .data-link .link {
+      display: inline-block;
+    }
+    .groups {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+    .group-card {
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 0.6rem 0.75rem;
+      background: #fafafa;
+      display: flex;
+      flex-direction: column;
+    }
+    .group-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #2c3e50;
+      margin-bottom: 0.5rem;
+    }
+    .intervals {
+      font-size: 0.75rem;
+      color: #555;
+      margin-bottom: 0.5rem;
+      line-height: 1.5;
+      flex-grow: 1;
+    }
+    .interval-item {
+      margin-bottom: 0.25rem;
+    }
+    .group-links {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      margin-top: auto;
+    }
+    .group-links .link {
+      width: 100%;
+    }
+    .link {
+      display: inline-block;
+      padding: 0.35rem 0.6rem;
+      background: #3498db;
+      color: white;
+      text-decoration: none;
+      border-radius: 3px;
+      font-size: 0.8rem;
+      transition: background 0.15s;
+      text-align: center;
+    }
+    .link:hover { background: #2980b9; }
+    .link.ics { background: #27ae60; }
+    .link.ics:hover { background: #229954; }
+    .link.data { background: #9b59b6; }
+    .link.data:hover { background: #8e44ad; }
+    footer {
+      margin-top: 0.75rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid #ddd;
+      text-align: center;
+      color: #7f8c8d;
+      font-size: 0.8rem;
+    }
+    footer a {
+      color: #3498db;
+      text-decoration: none;
+    }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>LOE Power Off</h1>
+      <div class="schedule-info">
+        <strong>Дата:</strong> ${data.date}${data.updated_at ? ` | <strong>Оновлено:</strong> ${new Date(data.updated_at).toLocaleString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}
+      </div>
+    </header>
+    <div class="description">
+      <strong>Як користуватися:</strong> Перегляньте графік відключень для вашої групи нижче. Натисніть на посилання "ICS", щоб додати календар відключень до вашого календарного додатку (Google Calendar, Apple Calendar, Outlook тощо). Також можна завантажити всі дані у форматі JSON для програмного використання.
+    </div>
+    <div class="data-link">
+      <a href="data/latest.json" class="link data">📊 Завантажити всі дані (JSON)</a>
+    </div>
+    <div class="groups">
+${groups.map(groupId => {
+  const intervals = data.groups[groupId];
+  const intervalsHtml = intervals.length > 0 
+    ? `<div class="intervals">${intervals.map(interval => 
+        `<div class="interval-item">${formatTime(interval.start)} — ${formatTime(interval.end)}</div>`
+      ).join('')}</div>`
+    : '';
+  return `      <div class="group-card">
+        <div class="group-title">Група ${groupId}</div>
+        ${intervalsHtml}
+        <div class="group-links">
+          <a href="cal/${groupId}.ics" class="link ics">📅 ICS</a>
+        </div>
+      </div>`;
+}).join('\n')}
+    </div>
+    <footer>
+      <a href="https://github.com/osuhol/loe-poweroff" target="_blank" rel="noopener noreferrer">GitHub</a>
+    </footer>
+  </div>
+</body>
+</html>`;
+  
+  const indexPath = path.join(publicDir, 'index.html');
+  await fs.writeFile(indexPath, html, 'utf-8');
+  console.log('Generated index.html');
+  
+  // Create .nojekyll file to disable Jekyll processing on GitHub Pages
+  const nojekyllPath = path.join(publicDir, '.nojekyll');
+  await fs.writeFile(nojekyllPath, '', 'utf-8');
+  console.log('Created .nojekyll file');
 }
 
 /* ---------------------------------------------------
