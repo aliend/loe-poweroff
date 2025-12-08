@@ -203,7 +203,13 @@ async function saveData(data) {
 async function main() {
     const URL = 'https://poweron.loe.lviv.ua/';
   
-    const browser = await puppeteer.launch();
+    const browser = await puppeteer.launch({
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+      ],
+    });
     const page = await browser.newPage();
 
     await page.goto(URL, {
