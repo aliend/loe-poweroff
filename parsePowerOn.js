@@ -38,58 +38,90 @@ function parseScheduleFromHtml(html) {
 
   if (ps.length < 3) throw new Error('Не знайшов достатньо <p>');
 
-  const dateMatch = ps[0].match(/на\s+(\d{2}\.\d{2}\.\d{4})/);
-  if (!dateMatch) throw new Error('Не вдалося розпізнати дату графіка');
+  // Find all date sections
+  const dateSections = [];
+  let currentSection = null;
+  let lastDateIndex = -1;
 
-  const scheduleDate = parseUkDate(dateMatch[1]);
-
-  const updatedMatch =
-    ps[1].match(/станом на\s+(\d{2}:\d{2})\s+(\d{2}\.\d{2}\.\d{4})/);
-  let updatedIso = null;
-  if (updatedMatch) {
-    const [, timeStr, updatedDateStr] = updatedMatch;
-    updatedIso = makeIso(parseUkDate(updatedDateStr), timeStr);
-  }
-
-  const groups = {};
-
-  for (let i = 2; i < ps.length; i++) {
+  for (let i = 0; i < ps.length; i++) {
     const line = ps[i];
-    if (!line.startsWith('Група')) continue;
-
-    const m = line.match(
-      /^Група\s+(\d\.\d)\.\s+Електроенергії немає\s+(.+)\.$/,
-    );
-
-    if (!m) continue;
-
-    const [, groupId, intervalsPart] = m;
-
-    const intervalStrings = intervalsPart.split(',').map((s) => s.trim());
-
-    const intervals = [];
-    for (const s of intervalStrings) {
-      const mm = s.match(/з\s+(\d{2}:\d{2})\s+до\s+(\d{2}:\d{2})/);
-      if (!mm) continue;
-      const [, startTime, endTime] = mm;
-      intervals.push({
-        start: makeIso(scheduleDate, startTime),
-        end: makeIso(scheduleDate, endTime),
-      });
+    
+    // Check if this is a date header: "Графік погодинних відключень на DD.MM.YYYY" or just "на DD.MM.YYYY"
+    const dateMatch = line.match(/(?:Графік погодинних відключень\s+)?на\s+(\d{2}\.\d{2}\.\d{4})/);
+    if (dateMatch) {
+      // Save previous section if exists
+      if (currentSection) {
+        dateSections.push(currentSection);
+      }
+      
+      // Start new section
+      const scheduleDate = parseUkDate(dateMatch[1]);
+      currentSection = {
+        date: scheduleDate,
+        groups: {},
+        updatedIso: null,
+      };
+      lastDateIndex = i;
+      continue;
     }
+    
+    // Check if this is an update time line (appears after date header)
+    if (currentSection && i === lastDateIndex + 1) {
+      const updatedMatch = line.match(/станом на\s+(\d{2}:\d{2})\s+(\d{2}\.\d{2}\.\d{4})/);
+      if (updatedMatch) {
+        const [, timeStr, updatedDateStr] = updatedMatch;
+        currentSection.updatedIso = makeIso(parseUkDate(updatedDateStr), timeStr);
+        continue;
+      }
+    }
+    
+    // Parse group lines
+    if (currentSection && line.startsWith('Група')) {
+      const m = line.match(
+        /^Група\s+(\d\.\d)\.\s+Електроенергії немає\s+(.+)\.$/,
+      );
 
-    groups[groupId] = intervals;
+      if (m) {
+        const [, groupId, intervalsPart] = m;
+        const intervalStrings = intervalsPart.split(',').map((s) => s.trim());
+
+        const intervals = [];
+        for (const s of intervalStrings) {
+          const mm = s.match(/з\s+(\d{2}:\d{2})\s+до\s+(\d{2}:\d{2})/);
+          if (!mm) continue;
+          const [, startTime, endTime] = mm;
+          intervals.push({
+            start: makeIso(currentSection.date, startTime),
+            end: makeIso(currentSection.date, endTime),
+          });
+        }
+
+        currentSection.groups[groupId] = intervals;
+      }
+    }
   }
 
-  const yy = scheduleDate.year;
-  const mm = String(scheduleDate.month).padStart(2, '0');
-  const dd = String(scheduleDate.day).padStart(2, '0');
+  // Don't forget the last section
+  if (currentSection) {
+    dateSections.push(currentSection);
+  }
 
-  return {
-    date: `${yy}-${mm}-${dd}`,
-    updated_at: updatedIso,
-    groups,
-  };
+  if (dateSections.length === 0) {
+    throw new Error('Не знайшов жодного розділу з датою');
+  }
+
+  // Convert sections to the expected format
+  return dateSections.map((section) => {
+    const yy = section.date.year;
+    const mm = String(section.date.month).padStart(2, '0');
+    const dd = String(section.date.day).padStart(2, '0');
+
+    return {
+      date: `${yy}-${mm}-${dd}`,
+      updated_at: section.updatedIso || null,
+      groups: section.groups,
+    };
+  });
 }
 
 function getTodayDate() {
@@ -833,9 +865,12 @@ async function main() {
     });
 
     const html = await page.content(); // тут вже є всі <p>
-    const data = parseScheduleFromHtml(html);
+    const dataArray = parseScheduleFromHtml(html);
     
-    await saveData(data);
+    // Save each day separately
+    for (const data of dataArray) {
+      await saveData(data);
+    }
     
     await browser.close();
   }
