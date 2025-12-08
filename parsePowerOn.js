@@ -92,6 +92,19 @@ function parseScheduleFromHtml(html) {
   };
 }
 
+function getTodayDate() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function isDateTodayOrFuture(dateStr) {
+  const today = getTodayDate();
+  return dateStr >= today;
+}
+
 function isoToIcalDateTime(isoString) {
   // Convert "2025-12-08T00:00:00+02:00" to "20251208T000000"
   // Remove dashes, colons, and timezone offset
@@ -157,7 +170,7 @@ function parseExistingIcal(icalContent) {
   return events;
 }
 
-function generateIcalForGroup(groupId, intervals, scheduleDate, existingEvents = {}) {
+function generateIcalForGroup(groupId, allIntervalsByDate, existingEvents = {}) {
   const lines = [];
   
   lines.push('BEGIN:VCALENDAR');
@@ -167,41 +180,48 @@ function generateIcalForGroup(groupId, intervals, scheduleDate, existingEvents =
   lines.push('METHOD:PUBLISH');
   lines.push(generateVTimezone());
   
-  for (let i = 0; i < intervals.length; i++) {
-    const interval = intervals[i];
-    const dtstart = isoToIcalDateTime(interval.start);
-    const dtend = isoToIcalDateTime(interval.end);
-    const uid = `${scheduleDate}-${groupId}-${i}@loe-poweroff`;
+  // Process all dates, sorted chronologically
+  const sortedDates = Object.keys(allIntervalsByDate).sort();
+  
+  for (const scheduleDate of sortedDates) {
+    const intervals = allIntervalsByDate[scheduleDate];
     
-    // Determine sequence number
-    let sequence = 0;
-    const existingEvent = existingEvents[uid];
-    if (existingEvent) {
-      // Event exists - check if it changed
-      // Compare with TZID format for existing events
-      const existingDtstart = existingEvent.dtstart.replace(/^.*TZID=Europe\/Kyiv:/, '').replace(/^DTSTART:/, '');
-      const existingDtend = existingEvent.dtend.replace(/^.*TZID=Europe\/Kyiv:/, '').replace(/^DTEND:/, '');
-      if (existingDtstart !== dtstart || existingDtend !== dtend) {
-        // Event changed - increment sequence
-        sequence = existingEvent.sequence + 1;
+    for (let i = 0; i < intervals.length; i++) {
+      const interval = intervals[i];
+      const dtstart = isoToIcalDateTime(interval.start);
+      const dtend = isoToIcalDateTime(interval.end);
+      const uid = `${scheduleDate}-${groupId}-${i}@loe-poweroff`;
+      
+      // Determine sequence number
+      let sequence = 0;
+      const existingEvent = existingEvents[uid];
+      if (existingEvent) {
+        // Event exists - check if it changed
+        // Compare with TZID format for existing events
+        const existingDtstart = existingEvent.dtstart.replace(/^.*TZID=Europe\/Kyiv:/, '').replace(/^DTSTART:/, '');
+        const existingDtend = existingEvent.dtend.replace(/^.*TZID=Europe\/Kyiv:/, '').replace(/^DTEND:/, '');
+        if (existingDtstart !== dtstart || existingDtend !== dtend) {
+          // Event changed - increment sequence
+          sequence = existingEvent.sequence + 1;
+        } else {
+          // Event unchanged - keep same sequence
+          sequence = existingEvent.sequence;
+        }
       } else {
-        // Event unchanged - keep same sequence
-        sequence = existingEvent.sequence;
+        // New event - start at 0
+        sequence = 0;
       }
-    } else {
-      // New event - start at 0
-      sequence = 0;
+      
+      lines.push('BEGIN:VEVENT');
+      lines.push(`UID:${uid}`);
+      lines.push(`SEQUENCE:${sequence}`);
+      lines.push(`DTSTART;TZID=Europe/Kyiv:${dtstart}`);
+      lines.push(`DTEND;TZID=Europe/Kyiv:${dtend}`);
+      lines.push(`SUMMARY:Відключення електроенергії (Група ${groupId})`);
+      lines.push(`DESCRIPTION:Група ${groupId}. Електроенергії немає з ${interval.start.substring(11, 16)} до ${interval.end.substring(11, 16)}`);
+      lines.push(`DTSTAMP:${isoToIcalDateTime(new Date().toISOString())}`);
+      lines.push('END:VEVENT');
     }
-    
-    lines.push('BEGIN:VEVENT');
-    lines.push(`UID:${uid}`);
-    lines.push(`SEQUENCE:${sequence}`);
-    lines.push(`DTSTART;TZID=Europe/Kyiv:${dtstart}`);
-    lines.push(`DTEND;TZID=Europe/Kyiv:${dtend}`);
-    lines.push(`SUMMARY:Відключення електроенергії (Група ${groupId})`);
-    lines.push(`DESCRIPTION:Група ${groupId}. Електроенергії немає з ${interval.start.substring(11, 16)} до ${interval.end.substring(11, 16)}`);
-    lines.push(`DTSTAMP:${isoToIcalDateTime(new Date().toISOString())}`);
-    lines.push('END:VEVENT');
   }
   
   lines.push('END:VCALENDAR');
@@ -209,7 +229,38 @@ function generateIcalForGroup(groupId, intervals, scheduleDate, existingEvents =
   return lines.join('\r\n') + '\r\n';
 }
 
-async function saveIcalCalendars(data) {
+async function loadAllDateFiles() {
+  const dataDir = path.join(process.cwd(), 'docs', 'data');
+  const today = getTodayDate();
+  const allData = {};
+  
+  try {
+    const files = await fs.readdir(dataDir);
+    const dateFiles = files.filter(f => f.match(/^\d{4}-\d{2}-\d{2}\.json$/));
+    
+    for (const file of dateFiles) {
+      const dateStr = file.replace('.json', '');
+      // Only load today and future dates
+      if (dateStr >= today) {
+        try {
+          const content = await fs.readFile(path.join(dataDir, file), 'utf-8');
+          const data = JSON.parse(content);
+          allData[dateStr] = data;
+        } catch (error) {
+          console.warn(`Warning: Could not read date file ${file}:`, error.message);
+        }
+      }
+    }
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      console.warn(`Warning: Could not read data directory:`, error.message);
+    }
+  }
+  
+  return allData;
+}
+
+async function saveIcalCalendars(allDataByDate) {
   const calDir = path.join(process.cwd(), 'docs', 'cal');
   
   // Create cal directory if it doesn't exist
@@ -221,8 +272,22 @@ async function saveIcalCalendars(data) {
     }
   }
   
+  // Collect all groups and their intervals by date
+  const groupsByDate = {};
+  const allGroupIds = new Set();
+  
+  for (const [dateStr, data] of Object.entries(allDataByDate)) {
+    for (const [groupId, intervals] of Object.entries(data.groups)) {
+      allGroupIds.add(groupId);
+      if (!groupsByDate[groupId]) {
+        groupsByDate[groupId] = {};
+      }
+      groupsByDate[groupId][dateStr] = intervals;
+    }
+  }
+  
   // Generate iCal file for each group
-  for (const [groupId, intervals] of Object.entries(data.groups)) {
+  for (const groupId of allGroupIds) {
     const fileName = `${groupId}.ics`;
     const filePath = path.join(calDir, fileName);
     
@@ -238,11 +303,59 @@ async function saveIcalCalendars(data) {
       }
     }
     
-    const icalContent = generateIcalForGroup(groupId, intervals, data.date, existingEvents);
+    const icalContent = generateIcalForGroup(groupId, groupsByDate[groupId], existingEvents);
     
     await fs.writeFile(filePath, icalContent, 'utf-8');
     console.log(`Saved iCal calendar: ${fileName}`);
   }
+}
+
+function combineDataFiles(allDataByDate) {
+  const today = getTodayDate();
+  const sortedDates = Object.keys(allDataByDate).filter(d => d >= today).sort();
+  
+  if (sortedDates.length === 0) {
+    return null;
+  }
+  
+  // Start with the earliest date (today or first future date)
+  const firstDate = sortedDates[0];
+  const combined = {
+    date: firstDate,
+    updated_at: allDataByDate[firstDate].updated_at,
+    groups: {}
+  };
+  
+  // Collect all groups
+  const allGroupIds = new Set();
+  for (const dateStr of sortedDates) {
+    for (const groupId of Object.keys(allDataByDate[dateStr].groups)) {
+      allGroupIds.add(groupId);
+    }
+  }
+  
+  // Combine intervals from all dates for each group
+  for (const groupId of allGroupIds) {
+    combined.groups[groupId] = [];
+    for (const dateStr of sortedDates) {
+      const data = allDataByDate[dateStr];
+      if (data.groups[groupId]) {
+        combined.groups[groupId].push(...data.groups[groupId]);
+      }
+    }
+    // Sort intervals by start time
+    combined.groups[groupId].sort((a, b) => a.start.localeCompare(b.start));
+  }
+  
+  // Use the most recent updated_at
+  for (const dateStr of sortedDates) {
+    const data = allDataByDate[dateStr];
+    if (data.updated_at && (!combined.updated_at || data.updated_at > combined.updated_at)) {
+      combined.updated_at = data.updated_at;
+    }
+  }
+  
+  return combined;
 }
 
 async function saveData(data) {
@@ -259,14 +372,26 @@ async function saveData(data) {
 
   const latestPath = path.join(dataDir, 'latest.json');
   
-  // Check if latest.json exists and compare updated_at
+  // Check if latest.json exists and compare updated_at for this specific date
+  let shouldSkip = false;
   try {
     const existingContent = await fs.readFile(latestPath, 'utf-8');
     const existingData = JSON.parse(existingContent);
     
-    if (existingData.updated_at === data.updated_at) {
-      console.log('Skipping all file operations: updated_at unchanged');
-      return;
+    // Check if this date's data already exists and hasn't changed
+    const datePath = path.join(dataDir, `${data.date}.json`);
+    try {
+      const dateContent = await fs.readFile(datePath, 'utf-8');
+      const dateData = JSON.parse(dateContent);
+      if (dateData.updated_at === data.updated_at) {
+        console.log(`Skipping ${data.date}.json: updated_at unchanged`);
+        shouldSkip = true;
+      }
+    } catch (error) {
+      // Date file doesn't exist, proceed
+      if (error.code !== 'ENOENT') {
+        console.warn(`Warning: Could not read date file:`, error.message);
+      }
     }
   } catch (error) {
     // File doesn't exist or is invalid, proceed with saving
@@ -275,20 +400,41 @@ async function saveData(data) {
     }
   }
 
-  // Save to latest.json
-  await fs.writeFile(latestPath, JSON.stringify(data, null, 2), 'utf-8');
-  console.log('Saved to latest.json');
+  // Only save date-specific file if date is today or future
+  if (isDateTodayOrFuture(data.date)) {
+    const datePath = path.join(dataDir, `${data.date}.json`);
+    await fs.writeFile(datePath, JSON.stringify(data, null, 2), 'utf-8');
+    console.log(`Saved to ${data.date}.json`);
+  } else {
+    console.log(`Skipping ${data.date}.json: date is in the past`);
+    if (shouldSkip) {
+      return;
+    }
+  }
 
-  // Save to date-specific file
-  const datePath = path.join(dataDir, `${data.date}.json`);
-  await fs.writeFile(datePath, JSON.stringify(data, null, 2), 'utf-8');
-  console.log(`Saved to ${data.date}.json`);
+  // Load all date files (today + future) and combine them
+  const allDataByDate = await loadAllDateFiles();
   
-  // Generate iCal calendars for all groups
-  await saveIcalCalendars(data);
+  // Add/update the current data
+  if (isDateTodayOrFuture(data.date)) {
+    allDataByDate[data.date] = data;
+  }
   
-  // Generate HTML index page
-  await generateIndexPage(data);
+  // Combine all data for latest.json
+  const combinedData = combineDataFiles(allDataByDate);
+  
+  if (combinedData) {
+    await fs.writeFile(latestPath, JSON.stringify(combinedData, null, 2), 'utf-8');
+    console.log('Saved to latest.json (combined current + future dates)');
+    
+    // Generate iCal calendars for all groups (current + future)
+    await saveIcalCalendars(allDataByDate);
+    
+    // Generate HTML index page
+    await generateIndexPage(combinedData);
+  } else {
+    console.log('No current or future dates to combine');
+  }
 }
 
 function formatTime(isoString) {
