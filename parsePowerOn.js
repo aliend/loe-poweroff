@@ -30,32 +30,50 @@ function makeIso({ year, month, day }, timeStr) {
 }
 
 function parseScheduleFromHtml(html) {
+  console.log('[PARSE] Starting HTML parsing...');
+  console.log(`[PARSE] HTML length: ${html.length} characters`);
+  
   const $ = cheerio.load(html);
 
   const ps = $('.power-off__text p')
     .toArray()
     .map((p) => $(p).text().trim());
 
-  if (ps.length < 3) throw new Error('Не знайшов достатньо <p>');
+  console.log(`[PARSE] Found ${ps.length} paragraph elements`);
+  if (ps.length > 0) {
+    console.log('[PARSE] First few paragraphs:', ps.slice(0, 5).map((p, i) => `[${i}] ${p.substring(0, 100)}`));
+  }
+
+  if (ps.length < 3) {
+    console.error('[PARSE] ERROR: Not enough <p> elements found');
+    throw new Error('Не знайшов достатньо <p>');
+  }
 
   // Find all date sections
   const dateSections = [];
   let currentSection = null;
   let lastDateIndex = -1;
 
+  console.log('[PARSE] Searching for date sections...');
+  
   for (let i = 0; i < ps.length; i++) {
     const line = ps[i];
     
     // Check if this is a date header: "Графік погодинних відключень на DD.MM.YYYY" or just "на DD.MM.YYYY"
     const dateMatch = line.match(/(?:Графік погодинних відключень\s+)?на\s+(\d{2}\.\d{2}\.\d{4})/);
     if (dateMatch) {
+      console.log(`[PARSE] Found date header at line ${i}: "${line}"`);
+      
       // Save previous section if exists
       if (currentSection) {
+        const groupCount = Object.keys(currentSection.groups).length;
+        console.log(`[PARSE] Saving previous section with ${groupCount} groups`);
         dateSections.push(currentSection);
       }
       
       // Start new section
       const scheduleDate = parseUkDate(dateMatch[1]);
+      console.log(`[PARSE] Starting new section for date: ${scheduleDate.year}-${scheduleDate.month}-${scheduleDate.day}`);
       currentSection = {
         date: scheduleDate,
         groups: {},
@@ -71,7 +89,10 @@ function parseScheduleFromHtml(html) {
       if (updatedMatch) {
         const [, timeStr, updatedDateStr] = updatedMatch;
         currentSection.updatedIso = makeIso(parseUkDate(updatedDateStr), timeStr);
+        console.log(`[PARSE] Found update time: ${currentSection.updatedIso}`);
         continue;
+      } else {
+        console.log(`[PARSE] Line ${i} (expected update time) didn't match pattern: "${line}"`);
       }
     }
     
@@ -83,45 +104,86 @@ function parseScheduleFromHtml(html) {
 
       if (m) {
         const [, groupId, intervalsPart] = m;
+        console.log(`[PARSE] Found group ${groupId} at line ${i}: "${line}"`);
+        console.log(`[PARSE] Intervals part: "${intervalsPart}"`);
+        
         const intervalStrings = intervalsPart.split(',').map((s) => s.trim());
+        console.log(`[PARSE] Split into ${intervalStrings.length} interval string(s):`, intervalStrings);
 
         const intervals = [];
         for (const s of intervalStrings) {
           const mm = s.match(/з\s+(\d{2}:\d{2})\s+до\s+(\d{2}:\d{2})/);
-          if (!mm) continue;
+          if (!mm) {
+            console.warn(`[PARSE] WARNING: Could not parse interval string "${s}" for group ${groupId}`);
+            continue;
+          }
           const [, startTime, endTime] = mm;
-          intervals.push({
+          const interval = {
             start: makeIso(currentSection.date, startTime),
             end: makeIso(currentSection.date, endTime),
-          });
+          };
+          console.log(`[PARSE] Parsed interval: ${startTime} -> ${endTime} (ISO: ${interval.start} to ${interval.end})`);
+          intervals.push(interval);
         }
 
+        if (intervals.length === 0) {
+          console.error(`[PARSE] ERROR: No valid intervals found for group ${groupId} from line: "${line}"`);
+        } else {
+          console.log(`[PARSE] Successfully parsed ${intervals.length} interval(s) for group ${groupId}`);
+        }
+        
         currentSection.groups[groupId] = intervals;
+      } else {
+        console.warn(`[PARSE] WARNING: Line ${i} starts with "Група" but doesn't match expected pattern: "${line}"`);
       }
     }
   }
 
   // Don't forget the last section
   if (currentSection) {
+    const groupCount = Object.keys(currentSection.groups).length;
+    console.log(`[PARSE] Saving last section with ${groupCount} groups`);
     dateSections.push(currentSection);
   }
 
   if (dateSections.length === 0) {
+    console.error('[PARSE] ERROR: No date sections found');
     throw new Error('Не знайшов жодного розділу з датою');
   }
 
+  console.log(`[PARSE] Found ${dateSections.length} date section(s)`);
+  
   // Convert sections to the expected format
-  return dateSections.map((section) => {
+  const result = dateSections.map((section) => {
     const yy = section.date.year;
     const mm = String(section.date.month).padStart(2, '0');
     const dd = String(section.date.day).padStart(2, '0');
+    const dateStr = `${yy}-${mm}-${dd}`;
+    
+    const groupIds = Object.keys(section.groups).sort();
+    const totalIntervals = Object.values(section.groups).reduce((sum, intervals) => sum + intervals.length, 0);
+    
+    console.log(`[PARSE] Section ${dateStr}: ${groupIds.length} groups, ${totalIntervals} total intervals`);
+    console.log(`[PARSE] Groups found: ${groupIds.join(', ')}`);
+    console.log(`[PARSE] Updated at: ${section.updatedIso || 'NOT SET'}`);
+    
+    // Log each group's intervals
+    for (const [groupId, intervals] of Object.entries(section.groups)) {
+      console.log(`[PARSE]   Group ${groupId}: ${intervals.length} interval(s)`);
+      intervals.forEach((interval, idx) => {
+        console.log(`[PARSE]     [${idx}] ${interval.start.substring(11, 16)} - ${interval.end.substring(11, 16)}`);
+      });
+    }
 
     return {
-      date: `${yy}-${mm}-${dd}`,
+      date: dateStr,
       updated_at: section.updatedIso || null,
       groups: section.groups,
     };
   });
+  
+  console.log('[PARSE] Parsing complete');
+  return result;
 }
 
 function getTodayDate() {
@@ -293,6 +355,7 @@ async function loadAllDateFiles() {
 }
 
 async function saveIcalCalendars(allDataByDate) {
+  console.log('[ICAL] Starting iCal calendar generation...');
   const calDir = path.join(process.cwd(), 'docs', 'cal');
   
   // Create cal directory if it doesn't exist
@@ -300,6 +363,7 @@ async function saveIcalCalendars(allDataByDate) {
     await fs.mkdir(calDir, { recursive: true });
   } catch (error) {
     if (error.code !== 'EEXIST') {
+      console.error(`[ICAL] ERROR: Could not create cal directory:`, error.message);
       throw error;
     }
   }
@@ -308,15 +372,20 @@ async function saveIcalCalendars(allDataByDate) {
   const groupsByDate = {};
   const allGroupIds = new Set();
   
+  console.log(`[ICAL] Processing ${Object.keys(allDataByDate).length} date(s)`);
   for (const [dateStr, data] of Object.entries(allDataByDate)) {
+    console.log(`[ICAL] Processing date ${dateStr}: ${Object.keys(data.groups).length} groups`);
     for (const [groupId, intervals] of Object.entries(data.groups)) {
       allGroupIds.add(groupId);
       if (!groupsByDate[groupId]) {
         groupsByDate[groupId] = {};
       }
       groupsByDate[groupId][dateStr] = intervals;
+      console.log(`[ICAL]   Group ${groupId}: ${intervals.length} interval(s)`);
     }
   }
+  
+  console.log(`[ICAL] Found ${allGroupIds.size} unique group(s): ${Array.from(allGroupIds).sort().join(', ')}`);
   
   // Generate iCal file for each group
   for (const groupId of allGroupIds) {
@@ -328,18 +397,27 @@ async function saveIcalCalendars(allDataByDate) {
     try {
       const existingContent = await fs.readFile(filePath, 'utf-8');
       existingEvents = parseExistingIcal(existingContent);
+      console.log(`[ICAL] Loaded existing ${fileName}: ${Object.keys(existingEvents).length} event(s)`);
     } catch (error) {
       // File doesn't exist or can't be read - start fresh
       if (error.code !== 'ENOENT') {
-        console.warn(`Warning: Could not read existing ICS file ${fileName}:`, error.message);
+        console.warn(`[ICAL] WARNING: Could not read existing ICS file ${fileName}:`, error.message);
+      } else {
+        console.log(`[ICAL] ${fileName} doesn't exist, will create new file`);
       }
     }
+    
+    const dateCount = Object.keys(groupsByDate[groupId]).length;
+    const totalIntervals = Object.values(groupsByDate[groupId]).reduce((sum, intervals) => sum + intervals.length, 0);
+    console.log(`[ICAL] Generating ${fileName} with ${dateCount} date(s) and ${totalIntervals} total interval(s)`);
     
     const icalContent = generateIcalForGroup(groupId, groupsByDate[groupId], existingEvents);
     
     await fs.writeFile(filePath, icalContent, 'utf-8');
-    console.log(`Saved iCal calendar: ${fileName}`);
+    console.log(`[ICAL] Saved iCal calendar: ${fileName}`);
   }
+  
+  console.log('[ICAL] iCal calendar generation complete');
 }
 
 function getNextDayOrToday(allDataByDate) {
@@ -362,6 +440,10 @@ function getNextDayOrToday(allDataByDate) {
 }
 
 async function saveData(data) {
+  console.log(`[SAVE] Processing data for date: ${data.date}`);
+  console.log(`[SAVE] Updated at: ${data.updated_at || 'NOT SET'}`);
+  console.log(`[SAVE] Groups: ${Object.keys(data.groups).length}`);
+  
   const dataDir = path.join(process.cwd(), 'docs', 'data');
   
   // Create data directory if it doesn't exist
@@ -369,6 +451,7 @@ async function saveData(data) {
     await fs.mkdir(dataDir, { recursive: true });
   } catch (error) {
     if (error.code !== 'EEXIST') {
+      console.error(`[SAVE] ERROR: Could not create data directory:`, error.message);
       throw error;
     }
   }
@@ -380,36 +463,61 @@ async function saveData(data) {
   try {
     const existingContent = await fs.readFile(latestPath, 'utf-8');
     const existingData = JSON.parse(existingContent);
+    console.log(`[SAVE] Found existing latest.json with date: ${existingData.date}`);
     
     // Check if this date's data already exists and hasn't changed
     const datePath = path.join(dataDir, `${data.date}.json`);
     try {
       const dateContent = await fs.readFile(datePath, 'utf-8');
       const dateData = JSON.parse(dateContent);
+      console.log(`[SAVE] Found existing ${data.date}.json`);
+      console.log(`[SAVE] Existing updated_at: ${dateData.updated_at}`);
+      console.log(`[SAVE] New updated_at: ${data.updated_at}`);
+      
       if (dateData.updated_at === data.updated_at) {
-        console.log(`Skipping ${data.date}.json: updated_at unchanged`);
+        console.log(`[SAVE] Skipping ${data.date}.json: updated_at unchanged`);
         shouldSkip = true;
+      } else {
+        console.log(`[SAVE] updated_at changed, will update ${data.date}.json`);
+        
+        // Compare groups to detect changes
+        const existingGroups = Object.keys(dateData.groups).sort();
+        const newGroups = Object.keys(data.groups).sort();
+        if (JSON.stringify(existingGroups) !== JSON.stringify(newGroups)) {
+          console.log(`[SAVE] WARNING: Group list changed!`);
+          console.log(`[SAVE]   Existing: ${existingGroups.join(', ')}`);
+          console.log(`[SAVE]   New: ${newGroups.join(', ')}`);
+        }
       }
     } catch (error) {
       // Date file doesn't exist, proceed
       if (error.code !== 'ENOENT') {
-        console.warn(`Warning: Could not read date file:`, error.message);
+        console.warn(`[SAVE] WARNING: Could not read date file:`, error.message);
+      } else {
+        console.log(`[SAVE] ${data.date}.json doesn't exist, will create it`);
       }
     }
   } catch (error) {
     // File doesn't exist or is invalid, proceed with saving
     if (error.code !== 'ENOENT') {
-      console.warn('Error reading latest.json:', error.message);
+      console.warn(`[SAVE] WARNING: Error reading latest.json:`, error.message);
+    } else {
+      console.log(`[SAVE] latest.json doesn't exist, will create it`);
     }
   }
 
   // Only save date-specific file if date is today or future
   if (isDateTodayOrFuture(data.date)) {
-    const datePath = path.join(dataDir, `${data.date}.json`);
-    await fs.writeFile(datePath, JSON.stringify(data, null, 2), 'utf-8');
-    console.log(`Saved to ${data.date}.json`);
+    if (!shouldSkip) {
+      const datePath = path.join(dataDir, `${data.date}.json`);
+      await fs.writeFile(datePath, JSON.stringify(data, null, 2), 'utf-8');
+      console.log(`[SAVE] Saved to ${data.date}.json`);
+      console.log(`[SAVE] Data summary: ${Object.keys(data.groups).length} groups, updated_at: ${data.updated_at}`);
+    } else {
+      console.log(`[SAVE] Skipped ${data.date}.json (no changes)`);
+    }
   } else {
-    console.log(`Skipping ${data.date}.json: date is in the past`);
+    console.log(`[SAVE] Skipping ${data.date}.json: date is in the past`);
     if (shouldSkip) {
       return;
     }
@@ -428,7 +536,8 @@ async function saveData(data) {
   
   if (selectedData) {
     await fs.writeFile(latestPath, JSON.stringify(selectedData, null, 2), 'utf-8');
-    console.log(`Saved to latest.json (${selectedData.date})`);
+    console.log(`[SAVE] Saved to latest.json (${selectedData.date})`);
+    console.log(`[SAVE] latest.json contains ${Object.keys(selectedData.groups).length} groups`);
     
     // Generate iCal calendars for all groups (include all dates for cumulative calendars)
     await saveIcalCalendars(allDataByDate);
@@ -436,16 +545,11 @@ async function saveData(data) {
     // Generate HTML index page for selected day (next day or today)
     await generateIndexPage(selectedData);
   } else {
-    console.log('No current or future dates available');
+    console.log('[SAVE] WARNING: No current or future dates available');
   }
 }
 
-function formatTime(isoString) {
-  // Extract time from ISO string like "2025-12-08T00:00:00+02:00"
-  const match = isoString.match(/T(\d{2}):(\d{2})/);
-  if (!match) return isoString;
-  return match[1] + ':' + match[2];
-}
+// formatTime is now handled in client-side JavaScript (docs/app.js)
 
 async function generateIndexPage(data) {
   const docsDir = path.join(process.cwd(), 'docs');
@@ -459,339 +563,14 @@ async function generateIndexPage(data) {
     }
   }
   
-  const groups = Object.keys(data.groups).sort();
-  
-  const html = `<!DOCTYPE html>
-<html lang="uk">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LOE Power Off - Графіки відключення електроенергії</title>
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-TTGCR258VQ"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', 'G-TTGCR258VQ');
-  </script>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-      line-height: 1.4;
-      color: #333;
-      background: #f5f5f5;
-      padding: 0.75rem;
-    }
-    .container {
-      max-width: 1000px;
-      margin: 0 auto;
-      background: white;
-      border-radius: 6px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
-      padding: 1rem 1.25rem;
-    }
-    header {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      margin-bottom: 0.75rem;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-    }
-    h1 {
-      color: #2c3e50;
-      font-size: 1.5rem;
-      font-weight: 600;
-    }
-    .schedule-info {
-      color: #7f8c8d;
-      font-size: 0.85rem;
-    }
-    .schedule-info strong { color: #2c3e50; }
-    .description {
-      background: #e8f4f8;
-      padding: 0.75rem;
-      border-radius: 4px;
-      margin-bottom: 0.75rem;
-      font-size: 0.85rem;
-      color: #2c3e50;
-      line-height: 1.5;
-    }
-    .groups {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 0.5rem;
-      margin-bottom: 0.75rem;
-    }
-    .group-card {
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      padding: 0.6rem 0.75rem;
-      background: #fafafa;
-      display: flex;
-      flex-direction: column;
-    }
-    .group-card.has-current {
-      border-color: #e74c3c;
-      background: #fff5f5;
-    }
-    .group-card.has-current .group-title {
-      color: #e74c3c;
-    }
-    .group-title {
-      font-size: 0.95rem;
-      font-weight: 600;
-      color: #2c3e50;
-      margin-bottom: 0.5rem;
-    }
-    .intervals {
-      font-size: 0.75rem;
-      color: #555;
-      margin-bottom: 0.5rem;
-      line-height: 1.5;
-      flex-grow: 1;
-    }
-    .interval-item {
-      margin-bottom: 0.25rem;
-    }
-    .interval-item.past {
-      color: #999;
-      opacity: 0.6;
-    }
-    .interval-item.current {
-      font-weight: bold;
-      color: #2c3e50;
-    }
-    .group-links {
-      display: flex;
-      flex-direction: column;
-      gap: 0.35rem;
-      margin-top: auto;
-    }
-    .group-links .link {
-      width: 100%;
-    }
-    .link.copy-link {
-      background: #27ae60;
-      font-size: 0.75rem;
-    }
-    .link.copy-link:hover {
-      background: #229954;
-    }
-    .link.copy-link.copied {
-      background: #27ae60;
-    }
-    .link.copy-link.copied:hover {
-      background: #229954;
-    }
-    .link {
-      display: inline-block;
-      padding: 0.35rem 0.6rem;
-      background: #3498db;
-      color: white;
-      text-decoration: none;
-      border-radius: 3px;
-      font-size: 0.8rem;
-      transition: background 0.15s;
-      text-align: center;
-    }
-    .link:hover { background: #2980b9; }
-    .link.ics { background: #27ae60; }
-    .link.ics:hover { background: #229954; }
-    footer {
-      margin-top: 0.75rem;
-      padding-top: 0.75rem;
-      border-top: 1px solid #ddd;
-      text-align: center;
-      color: #7f8c8d;
-      font-size: 0.8rem;
-    }
-    footer a {
-      color: #3498db;
-      text-decoration: none;
-    }
-    footer a:hover { text-decoration: underline; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <header>
-      <h1>LOE Power Off</h1>
-      <div class="schedule-info">
-        <strong>Дата:</strong> ${data.date}${data.updated_at ? ` | <strong>Оновлено:</strong> <span id="updated-time" data-timestamp="${data.updated_at}"></span>` : ''}
-      </div>
-    </header>
-    <div class="description">
-      <strong>Як користуватися:</strong> Перегляньте графік відключень для вашої групи нижче. Скопіюйте посилання на календар і додайте його до вашого календарного додатку (Google Calendar, Apple Calendar, Outlook тощо).
-      <br><br>
-      Інструкція для <a href="https://support.google.com/calendar/answer/37118?hl=uk" target="_blank" rel="noopener noreferrer" style="color: #3498db; text-decoration: underline;">Google Calendar</a>, <a href="https://support.microsoft.com/uk-ua/office/%D1%96%D0%BC%D0%BF%D0%BE%D1%80%D1%82-%D0%BA%D0%B0%D0%BB%D0%B5%D0%BD%D0%B4%D0%B0%D1%80%D1%96%D0%B2-%D0%B4%D0%BE-outlook-8e8364e1-400e-4c0f-a573-fe76b5a2d379" target="_blank" rel="noopener noreferrer" style="color: #3498db; text-decoration: underline;">Microsoft Outlook</a>, <a href="https://support.apple.com/uk-ua/guide/iphone/iph3d1110d4/16.0/ios/16.0" target="_blank" rel="noopener noreferrer" style="color: #3498db; text-decoration: underline;">iOS</a>.
-      <br><br>
-      <a href="data/latest.json" target="_blank" rel="noopener noreferrer" style="color: #3498db; text-decoration: underline;">Дані у форматі JSON</a>
-    </div>
-    <div class="groups" data-schedule-date="${data.date}">
-${groups.map(groupId => {
-  const intervals = data.groups[groupId];
-  const intervalsHtml = intervals.length > 0 
-    ? `<div class="intervals">${intervals.map(interval => 
-        `<div class="interval-item" data-start="${interval.start}" data-end="${interval.end}">${formatTime(interval.start)} — ${formatTime(interval.end)}</div>`
-      ).join('')}</div>`
-    : '';
-  return `      <div class="group-card">
-        <div class="group-title">Група ${groupId}</div>
-        ${intervalsHtml}
-        <div class="group-links">
-          <a href="#" class="link copy-link" data-ics-path="cal/${groupId}.ics">Скопіювати посилання</a>
-        </div>
-      </div>`;
-}).join('\n')}
-    </div>
-    <footer>
-      <a href="https://github.com/aliend/loe-poweroff" target="_blank" rel="noopener noreferrer">GitHub</a>
-    </footer>
-  </div>
-  <script>
-    (function() {
-      // Format updated timestamp in user's timezone
-      const updatedTimeEl = document.getElementById('updated-time');
-      if (updatedTimeEl) {
-        const timestamp = updatedTimeEl.getAttribute('data-timestamp');
-        if (timestamp) {
-          const date = new Date(timestamp);
-          const formatted = date.toLocaleString('uk-UA', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          });
-          updatedTimeEl.textContent = formatted;
-        }
-      }
-      
-      function updateIntervals() {
-        const now = new Date();
-        const currentTime = now.getTime();
-        const intervalItems = document.querySelectorAll('.interval-item');
-        const groupCards = document.querySelectorAll('.group-card');
-        
-        // Reset group cards
-        groupCards.forEach(card => {
-          card.classList.remove('has-current');
-        });
-        
-        intervalItems.forEach(item => {
-          // Get start and end times from data attributes (includes full date and time)
-          const startStr = item.getAttribute('data-start');
-          const endStr = item.getAttribute('data-end');
-          
-          if (!startStr || !endStr) return;
-          
-          const startTime = new Date(startStr).getTime();
-          const endTime = new Date(endStr).getTime();
-          
-          if (isNaN(startTime) || isNaN(endTime)) return;
-          
-          item.classList.remove('past', 'current');
-          
-          if (currentTime < startTime) {
-            // Future period - no special styling
-          } else if (currentTime >= startTime && currentTime < endTime) {
-            // Current period
-            item.classList.add('current');
-            // Mark parent group card as having current interval
-            const groupCard = item.closest('.group-card');
-            if (groupCard) {
-              groupCard.classList.add('has-current');
-            }
-          } else {
-            // Past period
-            item.classList.add('past');
-          }
-        });
-      }
-      
-      updateIntervals();
-      
-      // Update every minute
-      setInterval(updateIntervals, 60000);
-      
-      // Copy link functionality
-      const copyLinks = document.querySelectorAll('.copy-link');
-      copyLinks.forEach(link => {
-        link.addEventListener('click', async function(e) {
-          e.preventDefault();
-          const icsPath = this.getAttribute('data-ics-path');
-          const fullUrl = new URL(icsPath, window.location.href).href;
-          
-          try {
-            await navigator.clipboard.writeText(fullUrl);
-            const originalText = this.textContent;
-            this.textContent = '✓ Скопійовано!';
-            this.classList.add('copied');
-            
-            // Track calendar copy link event
-            if (typeof gtag !== 'undefined') {
-              const groupId = this.getAttribute('data-ics-path').replace('cal/', '').replace('.ics', '');
-              gtag('event', 'calendar_copy_link', {
-                'event_category': 'engagement',
-                'event_label': groupId,
-                'value': 1
-              });
-            }
-            
-            setTimeout(() => {
-              this.textContent = originalText;
-              this.classList.remove('copied');
-            }, 2000);
-          } catch (err) {
-            // Fallback for older browsers
-            const textArea = document.createElement('textarea');
-            textArea.value = fullUrl;
-            textArea.style.position = 'fixed';
-            textArea.style.opacity = '0';
-            document.body.appendChild(textArea);
-            textArea.select();
-            try {
-              document.execCommand('copy');
-              const originalText = this.textContent;
-              this.textContent = '✓ Скопійовано!';
-              this.classList.add('copied');
-              
-              // Track calendar copy link event
-              if (typeof gtag !== 'undefined') {
-                const groupId = this.getAttribute('data-ics-path').replace('cal/', '').replace('.ics', '');
-                gtag('event', 'calendar_copy_link', {
-                  'event_category': 'engagement',
-                  'event_label': groupId,
-                  'value': 1
-                });
-              }
-              
-              setTimeout(() => {
-                this.textContent = originalText;
-                this.classList.remove('copied');
-              }, 2000);
-            } catch (e) {
-              alert('Не вдалося скопіювати посилання');
-            }
-            document.body.removeChild(textArea);
-          }
-        });
-      });
-    })();
-  </script>
-</body>
-</html>`;
-  
-  const indexPath = path.join(docsDir, 'index.html');
-  await fs.writeFile(indexPath, html, 'utf-8');
-  console.log('Generated index.html');
+  // Ensure static files exist (they should be committed to git)
+  // This function now just ensures the directory structure is correct
+  // The actual HTML/CSS/JS files are static and loaded by the browser
   
   // Create .nojekyll file to disable Jekyll processing on GitHub Pages
   const nojekyllPath = path.join(docsDir, '.nojekyll');
   await fs.writeFile(nojekyllPath, '', 'utf-8');
-  console.log('Created .nojekyll file');
+  console.log('Ensured .nojekyll file exists');
 }
 
 /* ---------------------------------------------------
@@ -799,29 +578,67 @@ ${groups.map(groupId => {
 --------------------------------------------------- */
 async function main() {
     const URL = 'https://poweron.loe.lviv.ua/';
+    console.log('[MAIN] Starting parser...');
+    console.log(`[MAIN] Fetching from URL: ${URL}`);
   
-    const browser = await puppeteer.launch({
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-      ],
-    });
-    const page = await browser.newPage();
+    let browser;
+    try {
+      browser = await puppeteer.launch({
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+        ],
+      });
+      console.log('[MAIN] Browser launched successfully');
+      
+      const page = await browser.newPage();
+      console.log('[MAIN] Navigating to page...');
 
-    await page.goto(URL, {
-        waitUntil: "networkidle0"
-    });
+      await page.goto(URL, {
+          waitUntil: "networkidle0"
+      });
+      console.log('[MAIN] Page loaded, extracting HTML...');
 
-    const html = await page.content(); // тут вже є всі <p>
-    const dataArray = parseScheduleFromHtml(html);
-    
-    // Save each day separately
-    for (const data of dataArray) {
-      await saveData(data);
+      const html = await page.content(); // тут вже є всі <p>
+      console.log(`[MAIN] Retrieved HTML: ${html.length} characters`);
+      
+      // Check if we got meaningful content
+      if (html.length < 1000) {
+        console.error('[MAIN] ERROR: HTML content seems too short, possible fetch issue');
+      }
+      
+      // Check for expected content
+      if (!html.includes('power-off__text')) {
+        console.warn('[MAIN] WARNING: HTML does not contain expected "power-off__text" class');
+      }
+      
+      const dataArray = parseScheduleFromHtml(html);
+      console.log(`[MAIN] Parsed ${dataArray.length} date section(s)`);
+      
+      if (dataArray.length === 0) {
+        console.error('[MAIN] ERROR: No data parsed from HTML');
+        throw new Error('No data parsed from HTML');
+      }
+      
+      // Save each day separately
+      for (const data of dataArray) {
+        console.log(`[MAIN] Processing date: ${data.date}`);
+        await saveData(data);
+      }
+      
+      console.log('[MAIN] All data processed successfully');
+      
+    } catch (error) {
+      console.error('[MAIN] ERROR during execution:', error.message);
+      console.error('[MAIN] Stack trace:', error.stack);
+      throw error;
+    } finally {
+      if (browser) {
+        await browser.close();
+        console.log('[MAIN] Browser closed');
+      }
     }
-    
-    await browser.close();
   }
   
   main(); // ← ESM-спосіб запуску
