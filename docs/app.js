@@ -40,7 +40,7 @@
         ? `<div class="intervals">${intervals.map(interval => 
             `<div class="interval-item" data-start="${interval.start}" data-end="${interval.end}">${formatTime(interval.start)} — ${formatTime(interval.end)}</div>`
           ).join('')}</div>`
-        : '';
+        : '<div class="intervals"><div class="interval-item">Електроенергія є.</div></div>';
       
       return `<div class="group-card">
         <div class="group-title">Група ${groupId}</div>

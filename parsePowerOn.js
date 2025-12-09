@@ -98,6 +98,16 @@ function parseScheduleFromHtml(html) {
     
     // Parse group lines
     if (currentSection && line.startsWith('Група')) {
+      // Check for "Електроенергія є" (electricity is available) - no outages
+      const noOutageMatch = line.match(/^Група\s+(\d\.\d)\.\s+Електроенергія є\.?$/);
+      if (noOutageMatch) {
+        const [, groupId] = noOutageMatch;
+        console.log(`[PARSE] Found group ${groupId} with no outages: "${line}"`);
+        currentSection.groups[groupId] = [];
+        continue;
+      }
+      
+      // Check for "Електроенергії немає" (no electricity) - has outages
       const m = line.match(
         /^Група\s+(\d\.\d)\.\s+Електроенергії немає\s+(.+)\.$/,
       );
@@ -127,7 +137,7 @@ function parseScheduleFromHtml(html) {
         }
 
         if (intervals.length === 0) {
-          console.error(`[PARSE] ERROR: No valid intervals found for group ${groupId} from line: "${line}"`);
+          console.warn(`[PARSE] WARNING: No valid intervals found for group ${groupId} from line: "${line}"`);
         } else {
           console.log(`[PARSE] Successfully parsed ${intervals.length} interval(s) for group ${groupId}`);
         }
