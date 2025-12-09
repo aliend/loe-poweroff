@@ -237,6 +237,7 @@ function parseExistingIcal(icalContent) {
           sequence: currentEvent.sequence || 0,
           dtstart: currentEvent.dtstart,
           dtend: currentEvent.dtend,
+          dtstamp: currentEvent.dtstamp,
         };
       }
       currentEvent = null;
@@ -257,6 +258,8 @@ function parseExistingIcal(icalContent) {
         if (match) {
           currentEvent.dtend = match[1];
         }
+      } else if (line.startsWith('DTSTAMP:')) {
+        currentEvent.dtstamp = line.substring(8);
       }
     }
   }
@@ -286,8 +289,9 @@ function generateIcalForGroup(groupId, allIntervalsByDate, existingEvents = {}) 
       const dtend = isoToIcalDateTime(interval.end);
       const uid = `${scheduleDate}-${groupId}-${i}@loe-poweroff`;
       
-      // Determine sequence number
+      // Determine sequence number and whether event changed
       let sequence = 0;
+      let eventChanged = false;
       const existingEvent = existingEvents[uid];
       if (existingEvent) {
         // Event exists - check if it changed
@@ -297,14 +301,22 @@ function generateIcalForGroup(groupId, allIntervalsByDate, existingEvents = {}) 
         if (existingDtstart !== dtstart || existingDtend !== dtend) {
           // Event changed - increment sequence
           sequence = existingEvent.sequence + 1;
+          eventChanged = true;
         } else {
           // Event unchanged - keep same sequence
           sequence = existingEvent.sequence;
+          eventChanged = false;
         }
       } else {
         // New event - start at 0
         sequence = 0;
+        eventChanged = true;
       }
+      
+      // Use existing DTSTAMP if event unchanged, otherwise generate new one
+      const dtstamp = eventChanged || !existingEvent?.dtstamp
+        ? isoToIcalDateTime(new Date().toISOString())
+        : existingEvent.dtstamp;
       
       lines.push('BEGIN:VEVENT');
       lines.push(`UID:${uid}`);
@@ -313,7 +325,7 @@ function generateIcalForGroup(groupId, allIntervalsByDate, existingEvents = {}) 
       lines.push(`DTEND;TZID=Europe/Kyiv:${dtend}`);
       lines.push(`SUMMARY:Відключення електроенергії (Група ${groupId})`);
       lines.push(`DESCRIPTION:Група ${groupId}. Електроенергії немає з ${interval.start.substring(11, 16)} до ${interval.end.substring(11, 16)}`);
-      lines.push(`DTSTAMP:${isoToIcalDateTime(new Date().toISOString())}`);
+      lines.push(`DTSTAMP:${dtstamp}`);
       lines.push('END:VEVENT');
     }
   }
