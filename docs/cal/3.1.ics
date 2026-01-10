@@ -21,4 +21,13 @@ SUMMARY:Відключення електроенергії (Група 3.1)
 DESCRIPTION:Група 3.1. Електроенергії немає з 21:30 до 00:00
 DTSTAMP:20260110T103613.387
 END:VEVENT
+BEGIN:VEVENT
+UID:2026-01-11-3.1-0@loe-poweroff
+SEQUENCE:0
+DTSTART;TZID=Europe/Kyiv:20260111T110000
+DTEND;TZID=Europe/Kyiv:20260111T150000
+SUMMARY:Відключення електроенергії (Група 3.1)
+DESCRIPTION:Група 3.1. Електроенергії немає з 11:00 до 15:00
+DTSTAMP:20260110T180134.498
+END:VEVENT
 END:VCALENDAR
