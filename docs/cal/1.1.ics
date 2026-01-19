@@ -39,13 +39,4 @@ SUMMARY:Відключення електроенергії (Група 1.1)
 DESCRIPTION:Група 1.1. Електроенергії немає з 12:00 до 15:30
 DTSTAMP:20260119T094237.460
 END:VEVENT
-BEGIN:VEVENT
-UID:2026-01-19-1.1-3@loe-poweroff
-SEQUENCE:1
-DTSTART;TZID=Europe/Kyiv:20260119T200000
-DTEND;TZID=Europe/Kyiv:20260119T230000
-SUMMARY:Відключення електроенергії (Група 1.1)
-DESCRIPTION:Група 1.1. Електроенергії немає з 20:00 до 23:00
-DTSTAMP:20260119T144041.446
-END:VEVENT
 END:VCALENDAR
