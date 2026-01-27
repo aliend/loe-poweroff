@@ -21,13 +21,4 @@ SUMMARY:Відключення електроенергії (Група 6.2)
 DESCRIPTION:Група 6.2. Електроенергії немає з 02:00 до 05:30
 DTSTAMP:20260126T180214.283
 END:VEVENT
-BEGIN:VEVENT
-UID:2026-01-27-6.2-1@loe-poweroff
-SEQUENCE:0
-DTSTART;TZID=Europe/Kyiv:20260127T123000
-DTEND;TZID=Europe/Kyiv:20260127T160000
-SUMMARY:Відключення електроенергії (Група 6.2)
-DESCRIPTION:Група 6.2. Електроенергії немає з 12:30 до 16:00
-DTSTAMP:20260126T180214.283
-END:VEVENT
 END:VCALENDAR
