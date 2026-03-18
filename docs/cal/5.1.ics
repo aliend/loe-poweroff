@@ -21,4 +21,13 @@ SUMMARY:Відключення електроенергії (Група 5.1)
 DESCRIPTION:Група 5.1. Електроенергії немає з 12:00 до 12:30
 DTSTAMP:20260318T104458.890
 END:VEVENT
+BEGIN:VEVENT
+UID:2026-03-19-5.1-0@loe-poweroff
+SEQUENCE:0
+DTSTART;TZID=Europe/Kyiv:20260319T100000
+DTEND;TZID=Europe/Kyiv:20260319T133000
+SUMMARY:Відключення електроенергії (Група 5.1)
+DESCRIPTION:Група 5.1. Електроенергії немає з 10:00 до 13:30
+DTSTAMP:20260318T172009.664
+END:VEVENT
 END:VCALENDAR
